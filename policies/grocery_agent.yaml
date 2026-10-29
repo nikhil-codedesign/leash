@@ -1,0 +1,18 @@
+# Example Leash policy, written in rupees.
+# Anything not listed here is blocked (default deny).
+agent: grocery-agent
+description: Weekly groceries for one household. Mock payees only.
+
+payees:            # exact match, case-insensitive, no wildcards
+  - bigbasket@okaxis
+  - blinkit@okhdfcbank
+  - zepto@okicici
+
+limits:
+  per_payment_inr: 1500     # no single payment above this
+  total_inr: 4000           # no more than this across the whole run
+  rate_limit:
+    max_requests: 10        # attempts (allowed OR blocked) ...
+    per_seconds: 60         # ... per rolling window
+
+expires_in_minutes: 30      # the grant, and its token, stop working after this

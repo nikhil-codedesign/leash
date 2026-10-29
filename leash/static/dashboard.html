@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Leash dashboard</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#15181d; --muted:#667085; --line:#e4e7ec;
+          --ok:#067647; --okbg:#ecfdf3; --bad:#b42318; --badbg:#fef3f2; --warn:#b54708; --warnbg:#fffaeb; --accent:#175cd3; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0f1115; --card:#171a21; --ink:#e8eaee; --muted:#98a2b3; --line:#2a2f3a;
+            --ok:#6ce9a6; --okbg:#0b2a1b; --bad:#fda29b; --badbg:#2d1311; --warn:#fec84b; --warnbg:#2b1d05; --accent:#84adff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  header { padding:16px 20px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); background:var(--card); }
+  h1 { font-size:18px; margin:0; }
+  .tag { font-size:11px; padding:2px 8px; border-radius:99px; background:var(--warnbg); color:var(--warn); margin-left:8px; vertical-align:middle; }
+  main { padding:16px 20px; display:grid; gap:16px; max-width:1200px; margin:0 auto; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; overflow-x:auto; }
+  h2 { font-size:14px; margin:0 0 10px; }
+  input, button { font:inherit; padding:6px 10px; border-radius:6px; border:1px solid var(--line); background:var(--card); color:var(--ink); }
+  button { cursor:pointer; } button:hover { border-color:var(--accent); }
+  button.danger { color:var(--bad); }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; white-space:nowrap; }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  tr.blocked td { background:var(--badbg); }
+  tr.tampered td { outline:2px solid var(--bad); outline-offset:-2px; }
+  .pill { padding:1px 8px; border-radius:99px; font-size:12px; }
+  .ok { background:var(--okbg); color:var(--ok); } .bad { background:var(--badbg); color:var(--bad); } .neutral { background:var(--line); color:var(--muted); }
+  #banner { padding:8px 12px; border-radius:8px; display:none; margin-top:10px; }
+  .muted { color:var(--muted); } code { font-size:12px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Leash <span class="tag">MOCK payments &middot; no real money moves</span></h1>
+  <div class="row">
+    <label for="key" class="muted">Admin key</label>
+    <input id="key" type="password" size="28" placeholder="X-Admin-Key" autocomplete="off">
+    <button id="save">Connect</button>
+  </div>
+</header>
+<main>
+  <section>
+    <h2>Grants</h2>
+    <table><thead><tr><th>Agent</th><th>Grant</th><th>Status</th><th>Spent / total</th><th>Per payment</th><th>Attempts</th><th>Expires</th><th></th></tr></thead>
+    <tbody id="grants"></tbody></table>
+    <div id="grants-empty" class="muted" style="display:none">No grants yet.</div>
+  </section>
+  <section>
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">Action feed <span class="muted" id="feed-count"></span></h2>
+      <button id="verify">Verify audit log</button>
+    </div>
+    <div id="banner"></div>
+    <table style="margin-top:10px"><thead><tr><th>#</th><th>Time</th><th>Event</th><th>Grant</th><th>Payee</th><th>Amount</th><th>Result</th></tr></thead>
+    <tbody id="feed"></tbody></table>
+  </section>
+</main>
+<script>
+(function () {
+  var keyInput = document.getElementById('key');
+  var badSeq = null;
+  try { keyInput.value = sessionStorage.getItem('leash_key') || ''; } catch (e) {}
+
+  function el(tag, text, cls) {
+    var n = document.createElement(tag);
+    if (text !== undefined && text !== null) n.textContent = String(text);   // textContent only: payees are untrusted
+    if (cls) n.className = cls;
+    return n;
+  }
+  function inr(p) { return (typeof p === 'number') ? 'Rs ' + (p / 100).toFixed(2) : String(p); }
+  function when(ts) { return new Date(ts * 1000).toLocaleTimeString(); }
+  function short(id) { return id ? String(id).slice(0, 8) : ''; }
+  function api(path, opts) {
+    opts = opts || {}; opts.headers = Object.assign({'X-Admin-Key': keyInput.value}, opts.headers || {});
+    return fetch(path, opts).then(function (r) { return r.json().then(function (b) { return {status: r.status, body: b}; }); });
+  }
+  function td(tr, child) { var c = document.createElement('td'); c.appendChild(typeof child === 'string' ? document.createTextNode(child) : child); tr.appendChild(c); }
+
+  function renderGrants(grants) {
+    var body = document.getElementById('grants'); body.textContent = '';
+    document.getElementById('grants-empty').style.display = grants.length ? 'none' : 'block';
+    grants.forEach(function (g) {
+      var tr = document.createElement('tr');
+      td(tr, g.agent); td(tr, el('code', short(g.id)));
+      td(tr, el('span', g.status, 'pill ' + (g.status === 'active' ? 'ok' : g.status === 'revoked' ? 'bad' : 'neutral')));
+      td(tr, inr(g.spent_paise) + ' / ' + inr(g.total_cap_paise));
+      td(tr, inr(g.per_txn_cap_paise)); td(tr, g.attempts); td(tr, new Date(g.expires_at * 1000).toLocaleTimeString());
+      var cell = document.createElement('span');
+      if (g.status === 'active') {
+        var b = el('button', 'Revoke', 'danger');
+        b.addEventListener('click', function () { api('/grants/' + g.id + '/revoke', {method: 'POST'}).then(refresh); });
+        cell.appendChild(b);
+      }
+      td(tr, cell); body.appendChild(tr);
+    });
+  }
+  function renderFeed(entries) {
+    var body = document.getElementById('feed'); body.textContent = '';
+    document.getElementById('feed-count').textContent = '(' + entries.length + ' latest)';
+    entries.slice().reverse().forEach(function (e) {
+      var d = e.data || {}, tr = document.createElement('tr');
+      var isDecision = e.event === 'payment_decision';
+      if (isDecision && d.allowed === false) tr.className = 'blocked';
+      if (badSeq !== null && e.seq === badSeq) tr.className += ' tampered';
+      td(tr, e.seq); td(tr, when(e.ts)); td(tr, e.event); td(tr, el('code', short(e.grant_id)));
+      td(tr, isDecision ? String(d.payee) : ''); td(tr, isDecision ? inr(d.amount_paise) : '');
+      var res = el('span', isDecision ? (d.allowed ? 'ALLOWED' : 'BLOCKED: ' + d.reason) : '', isDecision ? 'pill ' + (d.allowed ? 'ok' : 'bad') : '');
+      td(tr, res); body.appendChild(tr);
+    });
+  }
+  function refresh() {
+    if (!keyInput.value) return;
+    api('/grants').then(function (r) { if (r.status === 200) renderGrants(r.body.grants); });
+    api('/audit?limit=100').then(function (r) { if (r.status === 200) renderFeed(r.body.entries); });
+  }
+  document.getElementById('save').addEventListener('click', function () {
+    try { sessionStorage.setItem('leash_key', keyInput.value); } catch (e) {}
+    refresh();
+  });
+  document.getElementById('verify').addEventListener('click', function () {
+    fetch('/audit/verify').then(function (r) { return r.json(); }).then(function (v) {
+      var b = document.getElementById('banner'); b.style.display = 'block';
+      if (v.ok) { badSeq = null; b.className = 'ok'; b.textContent = 'Audit log verified: ' + v.entries + ' entries, chain intact.'; }
+      else { badSeq = v.bad_seq; b.className = 'bad'; b.textContent = 'TAMPERING DETECTED at entry #' + v.bad_seq + ': ' + v.reason; }
+      refresh();
+    });
+  });
+  refresh(); setInterval(refresh, 2000);
+})();
+</script>
+</body>
+</html>
