@@ -1,0 +1,55 @@
+name: Tester feedback
+description: Tell me how Leash worked (or didn't) for you. Blunt is welcome.
+title: "Feedback: "
+labels: ["tester-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Leash (payments are mocked). Short answers are fine.
+  - type: dropdown
+    id: how_far
+    attributes:
+      label: How far did you get?
+      options:
+        - Couldn't install it
+        - Installed it, ran the demo
+        - Ran the demo and used the dashboard
+        - Put it in front of my own agent or project
+    validations:
+      required: true
+  - type: textarea
+    id: stuck
+    attributes:
+      label: Where did you get stuck or confused?
+      description: Install, the demo, the dashboard, the wording. Paste any error you saw.
+  - type: textarea
+    id: problem
+    attributes:
+      label: How do you handle agent access to money or APIs today?
+      description: And does Leash match a problem you really have?
+  - type: dropdown
+    id: would_use
+    attributes:
+      label: Would you use something like this?
+      options:
+        - Yes, I'd use it now
+        - Maybe, if something changed
+        - Probably not
+        - No
+    validations:
+      required: true
+  - type: textarea
+    id: needed
+    attributes:
+      label: What would have to be true before you'd use it? What's missing or pointless?
+  - type: dropdown
+    id: quote
+    attributes:
+      label: Can I quote this (with or without your name)?
+      options:
+        - Yes, with my name
+        - Yes, anonymously
+        - No, please don't quote me
+    validations:
+      required: true

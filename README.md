@@ -12,6 +12,8 @@ Agent ──token──> Leash gateway ──(only if allowed)──> Payment AP
           policy engine + audit log
 ```
 
+> **Trying it out?** Follow the 10-minute [tester guide](TESTING.md) and please leave [feedback](https://github.com/nikhil-codedesign/leash/issues/new?template=tester-feedback.yml).
+
 ## Try it in 30 seconds
 
 ```bash

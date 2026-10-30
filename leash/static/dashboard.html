@@ -44,6 +44,7 @@
   </div>
 </header>
 <main>
+  <div id="status" role="status" class="neutral" style="padding:8px 12px;border-radius:8px"></div>
   <section>
     <h2>Grants</h2>
     <table><thead><tr><th>Agent</th><th>Grant</th><th>Status</th><th>Spent / total</th><th>Per payment</th><th>Attempts</th><th>Expires</th><th></th></tr></thead>
@@ -79,7 +80,12 @@
     opts = opts || {}; opts.headers = Object.assign({'X-Admin-Key': keyInput.value}, opts.headers || {});
     return fetch(path, opts).then(function (r) { return r.json().then(function (b) { return {status: r.status, body: b}; }); });
   }
-  function td(tr, child) { var c = document.createElement('td'); c.appendChild(typeof child === 'string' ? document.createTextNode(child) : child); tr.appendChild(c); }
+  function td(tr, child) {
+    var c = document.createElement('td');
+    // Elements are appended as-is; everything else (strings, numbers, null) becomes plain text.
+    c.appendChild(child instanceof Node ? child : document.createTextNode(child === null || child === undefined ? '' : String(child)));
+    tr.appendChild(c);
+  }
 
   function renderGrants(grants) {
     var body = document.getElementById('grants'); body.textContent = '';
@@ -113,10 +119,34 @@
       td(tr, res); body.appendChild(tr);
     });
   }
+  function setStatus(msg, cls) {
+    var s = document.getElementById('status');
+    s.textContent = msg; s.className = cls;
+  }
+  function disconnected(msg, cls) {
+    setStatus(msg, cls);
+    document.getElementById('grants').textContent = '';
+    document.getElementById('feed').textContent = '';
+    document.getElementById('grants-empty').style.display = 'none';
+    document.getElementById('feed-count').textContent = '';
+  }
   function refresh() {
-    if (!keyInput.value) return;
-    api('/grants').then(function (r) { if (r.status === 200) renderGrants(r.body.grants); });
-    api('/audit?limit=100').then(function (r) { if (r.status === 200) renderFeed(r.body.entries); });
+    if (!keyInput.value) {
+      disconnected('Not connected. Paste the admin key printed in the terminal where the gateway started (or your LEASH_ADMIN_KEY), then click Connect.', 'neutral');
+      return;
+    }
+    api('/grants').then(function (r) {
+      if (r.status === 401) {
+        disconnected('Wrong admin key. Use the key printed in the terminal where the gateway started (or your LEASH_ADMIN_KEY). Restarting the gateway without LEASH_ADMIN_KEY set generates a new one.', 'bad');
+        return;
+      }
+      if (r.status !== 200) { disconnected('Unexpected response from the gateway (HTTP ' + r.status + ').', 'bad'); return; }
+      setStatus('Connected. Payments are MOCK; no real money moves.', 'ok');
+      renderGrants(r.body.grants);
+      return api('/audit?limit=100').then(function (a) { if (a.status === 200) renderFeed(a.body.entries); });
+    }).catch(function () {
+      disconnected('Cannot reach the gateway. Is it still running?', 'bad');
+    });
   }
   document.getElementById('save').addEventListener('click', function () {
     try { sessionStorage.setItem('leash_key', keyInput.value); } catch (e) {}
